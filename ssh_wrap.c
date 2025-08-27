@@ -62,6 +62,18 @@ ssh_ctx* ssh_open(const ssh_opts *o){
         libssh2_session_free(sess); closesocket(sock); libssh2_exit();
         return NULL;
     }
+
+    {
+    size_t len; int t=-1;
+    const char *hk = libssh2_session_hostkey(sess, &len, &t);
+    fprintf(stderr, "[dbg] hostkey type=%d len=%zu\n", t, len);
+    unsigned char fp[20];
+    hostkey_fingerprint_sha1(sess, fp);
+    fprintf(stderr, "[dbg] fp:");
+    for (int i=0;i<20;i++) fprintf(stderr, "%s%02x", i?":":" ", fp[i]);
+    fprintf(stderr, "\n");
+}
+
     unsigned char fp[20];
     hostkey_fingerprint_sha1(sess, fp);
     static const unsigned char expected_fp[20] = {
