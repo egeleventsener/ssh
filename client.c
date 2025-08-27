@@ -155,8 +155,8 @@ int main() {
         .host     = "192.168.0.172",   
         .port     = 22,
         .user     = "ege",             
-        .password = NULL,
-        .pkey_path= "/c/Users/Ege/.ssh/id_ed25519", 
+        .password = 211221,
+        .pkey_path= NULL, 
         .pkey_pass= NULL,
         .dst_host = "127.0.0.1",       
         .dst_port = 5000               
