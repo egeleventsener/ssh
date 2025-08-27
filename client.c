@@ -131,6 +131,11 @@ static void send_file_chunks(FILE *fp, int sockfd) {
 static const char* path_basename_safe(const char *p){
     const char *s=p,*a=p; for(;*s;++s) if(*s=='/'||*s=='\\') a=s+1; return a;
 }
+static const char* path_basename_safe(const char *p){
+                const char *s=p,*a=p;
+                for(;*s;++s) if(*s=='/'||*s=='\\') a=s+1;
+                return a;
+            }
 
 static int send_file_with_size_net(FILE *fp, const char *src) {
     struct stat st;
@@ -238,12 +243,7 @@ int main() {
             if (net_send_all(fname, strlen(fname)) < 0 || net_send_all("\n", 1) < 0) {
                 perror("send filename"); fclose(fp); continue;
             }
-            static const char* path_basename_safe(const char *p){
-                const char *s=p,*a=p;
-                for(;*s;++s) if(*s=='/'||*s=='\\') a=s+1;
-                return a;
-            }
-
+            
             if (send_file_with_size_net(fp, src) < 0) { perror("send file"); fclose(fp); continue; }
             fclose(fp);
 
