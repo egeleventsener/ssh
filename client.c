@@ -215,7 +215,7 @@ int main() {
         continue;
     }
 
-    printf("Enter destination directory on server (e.g., . or uploads): ");
+    printf("Enter destination directory on server: ");
     if (!fgets(dest, sizeof(dest), stdin)) { perror("fgets"); continue; }
     dest[strcspn(dest, "\n")] = 0;
 
