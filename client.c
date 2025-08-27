@@ -186,69 +186,72 @@ int main() {
         if (!strncmp(buffer, "rm ", 3)) { local_rm(buffer+3); continue; }
 
         if (!strncmp(buffer, "send_file", 9)) {
-            char src[PATH_MAX], mode[16], dest[PATH_MAX];
+    char src[PATH_MAX], mode[16], dest[PATH_MAX];
 
-            if (buffer[9] == ' ' && buffer[10] != '\0') {
-                strncpy(src, buffer + 10, sizeof(src)-1); src[sizeof(src)-1] = '\0';
-            } else {
-                printf("Enter full path of file to send: ");
-                if (!fgets(src, sizeof(src), stdin)) { perror("fgets"); continue; }
-                src[strcspn(src, "\n")] = 0;
-            }
+    if (buffer[9] == ' ' && buffer[10] != '\0') {
+        strncpy(src, buffer + 10, sizeof(src)-1); src[sizeof(src)-1] = '\0';
+    } else {
+        printf("Enter full path of file to send: ");
+        if (!fgets(src, sizeof(src), stdin)) { perror("fgets"); continue; }
+        src[strcspn(src, "\n")] = 0;
+    }
 
-            printf("Target (server/local): ");
-            if (!fgets(mode, sizeof(mode), stdin)) { perror("fgets"); continue; }
-            mode[strcspn(mode, "\n")] = 0;
+    printf("Target (server/local): ");
+    if (!fgets(mode, sizeof(mode), stdin)) { perror("fgets"); continue; }
+    mode[strcspn(mode, "\n")] = 0;
 
-            if (!strncasecmp(mode, "local", 5)) {
-                printf("Enter destination path on client: ");
-                if (!fgets(dest, sizeof(dest), stdin)) { perror("fgets"); continue; }
-                dest[strcspn(dest, "\n")] = 0;
+    if (!strncasecmp(mode, "local", 5)) {
+        printf("Enter destination path on client: ");
+        if (!fgets(dest, sizeof(dest), stdin)) { perror("fgets"); continue; }
+        dest[strcspn(dest, "\n")] = 0;
 
-                int treat_as_dir = 0;
-                size_t dl = strlen(dest);
-                if (dl && (dest[dl-1]=='/' || dest[dl-1]=='\\')) treat_as_dir = 1;
-                if (!treat_as_dir && is_dir_path(dest)) treat_as_dir = 1;
+        int treat_as_dir = 0;
+        size_t dl = strlen(dest);
+        if (dl && (dest[dl-1]=='/' || dest[dl-1]=='\\')) treat_as_dir = 1;
+        if (!treat_as_dir && is_dir_path(dest)) treat_as_dir = 1;
 
-                char finaldst[PATH_MAX];
-                if (treat_as_dir) join_path(finaldst, sizeof(finaldst), dest, path_basename(src));
-                else { strncpy(finaldst, dest, sizeof(finaldst)-1); finaldst[sizeof(finaldst)-1] = '\0'; }
+        char finaldst[PATH_MAX];
+        if (treat_as_dir) join_path(finaldst, sizeof(finaldst), dest, path_basename_safe(src));
+        else { strncpy(finaldst, dest, sizeof(finaldst)-1); finaldst[sizeof(finaldst)-1] = '\0'; }
 
-                if (local_copy_file(src, finaldst) == 0) printf("Local copy OK: %s\n", finaldst);
-                else printf("Local copy FAILED\n");
-                continue;
-            }
+        if (local_copy_file(src, finaldst) == 0) printf("Local copy OK: %s\n", finaldst);
+        else printf("Local copy FAILED\n");
+        continue;
+    }
 
-            printf("Enter destination directory on server (e.g., . or uploads): ");
-            if (!fgets(dest, sizeof(dest), stdin)) { perror("fgets"); continue; }
-            dest[strcspn(dest, "\n")] = 0;
+    printf("Enter destination directory on server (e.g., . or uploads): ");
+    if (!fgets(dest, sizeof(dest), stdin)) { perror("fgets"); continue; }
+    dest[strcspn(dest, "\n")] = 0;
 
-            FILE *fp = fopen(src, "rb");
-            if (!fp) { perror("open file"); continue; }
+    FILE *fp = fopen(src, "rb");
+    if (!fp) { perror("open file"); continue; }
 
-            if (dest[0] != '\0' && !(dest[0]=='.' && dest[1]=='\0')) {
-                char scd[PATH_MAX+8];
-                int m = snprintf(scd, sizeof(scd), "scd %s", dest);
-                if (m > 0) {
-                    if (net_send_all(scd, (size_t)m) < 0 || net_send_all("\n", 1) < 0) { perror("send scd"); fclose(fp); continue; }
-                }
-            }
-
-            if (net_send_all("write_file\n", 11) < 0) { perror("send write_file"); fclose(fp); continue; }
-
-            const char *fname = path_basename(src);
-            if (net_send_all(fname, strlen(fname)) < 0 || net_send_all("\n", 1) < 0) {
-                perror("send filename"); fclose(fp); continue;
-            }
-            
-            if (send_file_with_size_net(fp, src) < 0) { perror("send file"); fclose(fp); continue; }
-            fclose(fp);
-
-            char resp[256] = {0};
-            ssize_t r = net_recv(resp, sizeof(resp)-1);
-            if (r > 0) { resp[r] = '\0'; printf("Server: %s", resp); }
-            continue;
+    if (dest[0] != '\0' && !(dest[0]=='.' && dest[1]=='\0')) {
+        char scd[PATH_MAX+8];
+        int m = snprintf(scd, sizeof(scd), "scd %s", dest);
+        if (m > 0) {
+            if (net_send_all(scd, (size_t)m) < 0 || net_send_all("\n", 1) < 0) { perror("send scd"); fclose(fp); continue; }
+            char ack[256];
+            if (net_recv_line(ack, sizeof ack) <= 0) { fprintf(stderr,"scd ack yok\n"); fclose(fp); continue; }
+            /* isteğe bağlı: printf("Server: %s", ack); */
         }
+    }
+
+    if (net_send_all("write_file\n", 11) < 0) { perror("send write_file"); fclose(fp); continue; }
+
+    if (send_file_with_size_net(fp, src) < 0) { perror("send size+data"); fclose(fp); continue; }
+
+    const char *fname = path_basename_safe(src);
+    if (net_send_all(fname, strlen(fname)) < 0 || net_send_all("\n", 1) < 0) { perror("send filename"); fclose(fp); continue; }
+
+    fclose(fp);
+
+    char resp[256] = {0};
+    ssize_t r = net_recv_line(resp, sizeof resp);
+    if (r > 0) printf("Server: %s", resp);
+    continue;
+}
+
 
         if (net_send_all(buffer, strlen(buffer)) < 0 || net_send_all("\n", 1) < 0) {
             perror("send"); continue;
