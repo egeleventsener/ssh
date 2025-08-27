@@ -129,9 +129,6 @@ static void send_file_chunks(FILE *fp, int sockfd) {
 }
 
 static const char* path_basename_safe(const char *p){
-    const char *s=p,*a=p; for(;*s;++s) if(*s=='/'||*s=='\\') a=s+1; return a;
-}
-static const char* path_basename_safe(const char *p){
                 const char *s=p,*a=p;
                 for(;*s;++s) if(*s=='/'||*s=='\\') a=s+1;
                 return a;
