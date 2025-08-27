@@ -52,7 +52,7 @@ ssh_ctx* ssh_open(const ssh_opts *o){
 #ifdef _WIN32
     WSADATA w; WSAStartup(MAKEWORD(2,2), &w);
 #endif
-    if(LIBSSH2_INIT_SUCCESS != libssh2_init(0)) return NULL;
+    if (libssh2_init(0) != 0) return NULL;
     int sock = tcp_connect(o->host, o->port);
     if(sock < 0) { libssh2_exit(); return NULL; }
     LIBSSH2_SESSION *sess = libssh2_session_init();
