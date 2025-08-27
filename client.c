@@ -129,27 +129,21 @@ static void send_file_chunks(FILE *fp, int sockfd) {
 }
 
 static const char* path_basename_safe(const char *p){
-                const char *s=p,*a=p;
-                for(;*s;++s) if(*s=='/'||*s=='\\') a=s+1;
-                return a;
-            }
+    const char *s=p,*a=p; for(;*s;++s) if(*s=='/'||*s=='\\') a=s+1; return a;
+}
 
-static int send_file_with_size_net(FILE *fp, const char *src) {
-    struct stat st;
-    if (stat(src, &st) != 0) return -1;
+static int send_file_with_size_net(FILE *fp, const char *src){
+    struct stat st; if (stat(src, &st)!=0) return -1;
     int64_t size = (int64_t)st.st_size;
-
     char sizestr[64];
     int m = snprintf(sizestr, sizeof sizestr, "%" PRId64 "\n", size);
-    if (m <= 0) return -1;
+    if (m<=0) return -1;
     if (net_send_all(sizestr, (size_t)m) < 0) return -1;
-
-    unsigned char buf[64*1024];
-    size_t n;
-    while ((n = fread(buf, 1, sizeof buf, fp)) > 0) {
+    unsigned char buf[64*1024]; size_t n;
+    while((n=fread(buf,1,sizeof buf,fp))>0){
         if (net_send_all(buf, n) < 0) return -1;
     }
-    return ferror(fp) ? -1 : 0;
+    return ferror(fp)?-1:0;
 }
 
 int main() {
@@ -226,30 +220,33 @@ int main() {
     FILE *fp = fopen(src, "rb");
     if (!fp) { perror("open file"); continue; }
 
-    if (dest[0] != '\0' && !(dest[0]=='.' && dest[1]=='\0')) {
-        char scd[PATH_MAX+8];
-        int m = snprintf(scd, sizeof(scd), "scd %s", dest);
-        if (m > 0) {
-            if (net_send_all(scd, (size_t)m) < 0 || net_send_all("\n", 1) < 0) { perror("send scd"); fclose(fp); continue; }
-            char ack[256];
-            if (net_recv_line(ack, sizeof ack) <= 0) { fprintf(stderr,"scd ack yok\n"); fclose(fp); continue; }
-            /* isteğe bağlı: printf("Server: %s", ack); */
-        }
+    /* 1) scd gönder + ACK bekle */
+if (dest[0] && !(dest[0]=='.' && dest[1]=='\0')) {
+    char scd[PATH_MAX+8];
+    int m = snprintf(scd, sizeof scd, "scd %s", dest);
+    if (m > 0) {
+        if (net_send_all(scd, (size_t)m) < 0 || net_send_all("\n",1) < 0) { perror("send scd"); fclose(fp); continue; }
+        char ack[256];
+        ssize_t ar = net_recv_line(ack, sizeof ack);
+        if (ar <= 0) { fprintf(stderr,"scd ack yok\n"); fclose(fp); continue; }
     }
+}
 
-    if (net_send_all("write_file\n", 11) < 0) { perror("send write_file"); fclose(fp); continue; }
+/* 2) write_file */
+if (net_send_all("write_file\n", 11) < 0) { perror("send write_file"); fclose(fp); continue; }
 
-    if (send_file_with_size_net(fp, src) < 0) { perror("send size+data"); fclose(fp); continue; }
+/* 3) ÖNCE FILENAME satırı */
+const char *fname = path_basename_safe(src);
+if (net_send_all(fname, strlen(fname)) < 0 || net_send_all("\n",1) < 0) { perror("send filename"); fclose(fp); continue; }
 
-    const char *fname = path_basename_safe(src);
-    if (net_send_all(fname, strlen(fname)) < 0 || net_send_all("\n", 1) < 0) { perror("send filename"); fclose(fp); continue; }
+/* 4) SONRA SIZE + DATA */
+if (send_file_with_size_net(fp, src) < 0) { perror("send size+data"); fclose(fp); continue; }
 
-    fclose(fp);
+/* 5) Sunucu cevabı */
+char resp[256] = {0};
+ssize_t r = net_recv_line(resp, sizeof resp);
+if (r > 0) printf("Server: %s", resp);
 
-    char resp[256] = {0};
-    ssize_t r = net_recv_line(resp, sizeof resp);
-    if (r > 0) printf("Server: %s", resp);
-    continue;
 }
 
 
