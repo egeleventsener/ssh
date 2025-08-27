@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <errno.h>
+#include <inttypes.h>
 
 
 #ifndef PATH_MAX
@@ -127,25 +128,26 @@ static void send_file_chunks(FILE *fp, int sockfd) {
     if (send(sockfd, "EOF", 3, 0) < 0) perror("send EOF");
 }
 
-// net_send_all kullanarak dosya gönderimi 
-static int send_file_with_size_net(FILE *fp, const char *src) {
-    unsigned char buf[64*1024];
-    long pos, end;
-    if (fseek(fp, 0, SEEK_END) != 0) return -1;
-    end = ftell(fp);
-    if (end < 0) return -1;
-    if (fseek(fp, 0, SEEK_SET) != 0) return -1;
+static const char* path_basename_safe(const char *p){
+    const char *s=p,*a=p; for(;*s;++s) if(*s=='/'||*s=='\\') a=s+1; return a;
+}
 
-    char sizestr[32];
-    int m = snprintf(sizestr, sizeof(sizestr), "%ld\n", end);
+static int send_file_with_size_net(FILE *fp, const char *src) {
+    struct stat st;
+    if (stat(src, &st) != 0) return -1;
+    int64_t size = (int64_t)st.st_size;
+
+    char sizestr[64];
+    int m = snprintf(sizestr, sizeof sizestr, "%" PRId64 "\n", size);
     if (m <= 0) return -1;
     if (net_send_all(sizestr, (size_t)m) < 0) return -1;
 
-    while ((pos = (long)fread(buf, 1, sizeof buf, fp)) > 0) {
-        if (net_send_all(buf, (size_t)pos) < 0) return -1;
+    unsigned char buf[64*1024];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof buf, fp)) > 0) {
+        if (net_send_all(buf, n) < 0) return -1;
     }
-    if (ferror(fp)) return -1;
-    return 0;
+    return ferror(fp) ? -1 : 0;
 }
 
 int main() {
@@ -235,6 +237,11 @@ int main() {
             const char *fname = path_basename(src);
             if (net_send_all(fname, strlen(fname)) < 0 || net_send_all("\n", 1) < 0) {
                 perror("send filename"); fclose(fp); continue;
+            }
+            static const char* path_basename_safe(const char *p){
+                const char *s=p,*a=p;
+                for(;*s;++s) if(*s=='/'||*s=='\\') a=s+1;
+                return a;
             }
 
             if (send_file_with_size_net(fp, src) < 0) { perror("send file"); fclose(fp); continue; }
