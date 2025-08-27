@@ -1,0 +1,27 @@
+# Derlenmiş ikili dosyalar
+client
+server
+*.exe
+*.out
+
+# Nesne dosyaları
+*.o
+*.obj
+
+# Kütüphane/dll/pdb
+*.dll
+*.so
+*.dylib
+*.pdb
+*.lib
+*.a
+
+# Geçici dosyalar
+*.log
+*.tmp
+*.swp
+*.bak
+
+# VSCode / CLion / IDE klasörleri
+.vscode/
+.idea/
