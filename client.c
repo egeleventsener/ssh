@@ -135,10 +135,12 @@ static const char* path_basename_safe(const char *p){
 static int send_file_with_size_net(FILE *fp, const char *src){
     struct stat st; if (stat(src, &st)!=0) return -1;
     int64_t size = (int64_t)st.st_size;
-    char sizestr[64];
-    int m = snprintf(sizestr, sizeof sizestr, "%" PRId64 "\n", size);
-    if (m<=0) return -1;
-    if (net_send_all(sizestr, (size_t)m) < 0) return -1;
+
+    char hdr[96];
+    int m = snprintf(hdr, sizeof hdr, "SIZE %" PRId64 "\n", size);  // <-- ZORUNLU: "SIZE " öneki
+    if (m <= 0) return -1;
+    if (net_send_all(hdr, (size_t)m) < 0) return -1;
+
     unsigned char buf[64*1024]; size_t n;
     while((n=fread(buf,1,sizeof buf,fp))>0){
         if (net_send_all(buf, n) < 0) return -1;
@@ -220,33 +222,29 @@ int main() {
     FILE *fp = fopen(src, "rb");
     if (!fp) { perror("open file"); continue; }
 
-    /* 1) scd gönder + ACK bekle */
+/* scd + ACK (isteğe bağlı) */
 if (dest[0] && !(dest[0]=='.' && dest[1]=='\0')) {
     char scd[PATH_MAX+8];
     int m = snprintf(scd, sizeof scd, "scd %s", dest);
-    if (m > 0) {
-        if (net_send_all(scd, (size_t)m) < 0 || net_send_all("\n",1) < 0) { perror("send scd"); fclose(fp); continue; }
-        char ack[256];
-        ssize_t ar = net_recv_line(ack, sizeof ack);
-        if (ar <= 0) { fprintf(stderr,"scd ack yok\n"); fclose(fp); continue; }
+    if (m>0){
+        if (net_send_all(scd, (size_t)m) < 0 || net_send_all("\n",1) < 0){ perror("send scd"); fclose(fp); continue; }
+        char ack[256]; if (net_recv_line(ack, sizeof ack) <= 0){ fprintf(stderr,"scd ack yok\n"); fclose(fp); continue; }
     }
 }
 
-/* 2) write_file */
-if (net_send_all("write_file\n", 11) < 0) { perror("send write_file"); fclose(fp); continue; }
+/* write_file (ACK bekleme) */
+if (net_send_all("write_file\n", 11) < 0){ perror("send write_file"); fclose(fp); continue; }
 
-/* 3) ÖNCE FILENAME satırı */
+/* filename */
 const char *fname = path_basename_safe(src);
-if (net_send_all(fname, strlen(fname)) < 0 || net_send_all("\n",1) < 0) { perror("send filename"); fclose(fp); continue; }
+if (net_send_all(fname, strlen(fname)) < 0 || net_send_all("\n",1) < 0){ perror("send fname"); fclose(fp); continue; }
 
-/* 4) SONRA SIZE + DATA */
-if (send_file_with_size_net(fp, src) < 0) { perror("send size+data"); fclose(fp); continue; }
+/* SIZE + data */
+if (send_file_with_size_net(fp, src) < 0){ perror("send size+data"); fclose(fp); continue; }
 
-/* 5) Sunucu cevabı */
-char resp[256] = {0};
-ssize_t r = net_recv_line(resp, sizeof resp);
-if (r > 0) printf("Server: %s", resp);
-
+/* Son cevap */
+char resp[256]={0}; ssize_t r = net_recv_line(resp, sizeof resp);
+if (r>0) printf("Server: %s", resp);
 }
 
 
